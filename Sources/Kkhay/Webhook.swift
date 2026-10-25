@@ -10,12 +10,17 @@ public enum KkhayWebhook {
             return false
         }
 
-        let key = SymmetricKey(data: Data(ipnSecret.trimmingCharacters(in: .whitespacesAndNewlines).utf8))
+        let cleanSecret = ipnSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = SymmetricKey(data: Data(cleanSecret.utf8))
         let authenticationCode = HMAC<SHA256>.authenticationCode(for: payload, using: key)
         let expectedHex = authenticationCode.map { String(format: "%02hhx", $0) }.joined()
 
-        // Constant time comparison
         return constantTimeCompare(expectedHex.lowercased(), signature.lowercased())
+    }
+
+    /// String convenience overload for verifySignature.
+    public static func verifySignature(payload: String, signature: String?, ipnSecret: String) -> Bool {
+        return verifySignature(payload: Data(payload.utf8), signature: signature, ipnSecret: ipnSecret)
     }
 
     /// Validates signature and parses JSON payload into a typed WebhookEvent.
@@ -28,8 +33,13 @@ public enum KkhayWebhook {
             let decoder = JSONDecoder()
             return try decoder.decode(WebhookEvent.self, from: rawBody)
         } catch {
-            throw KkhayError.decodingError(error)
+            throw KkhayError.decodingError(error.localizedDescription)
         }
+    }
+
+    /// String convenience overload for parseEvent.
+    public static func parseEvent(rawBody: String, signature: String?, ipnSecret: String) throws -> WebhookEvent {
+        return try parseEvent(rawBody: Data(rawBody.utf8), signature: signature, ipnSecret: ipnSecret)
     }
 
     private static func constantTimeCompare(_ a: String, _ b: String) -> Bool {
@@ -44,4 +54,3 @@ public enum KkhayWebhook {
         return result == 0
     }
 }
-

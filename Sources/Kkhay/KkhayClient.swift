@@ -1,6 +1,8 @@
 import Foundation
 
 public final class KkhayClient: Sendable {
+    public static let version: String = "1.0.4"
+
     public let apiKey: String
     public let baseURL: String
     public let session: URLSession
@@ -15,7 +17,7 @@ public final class KkhayClient: Sendable {
         self.session = session
     }
 
-    private func getURL(path: String) -> URL? {
+    public func getURL(path: String) -> URL? {
         let cleanPath = path.hasPrefix("/") ? path : "/\(path)"
         let fullPath: String
         if baseURL.hasSuffix("/api") || baseURL.contains("api.") {
@@ -31,6 +33,10 @@ public final class KkhayClient: Sendable {
         method: String = "GET",
         body: Data? = nil
     ) async throws -> T {
+        guard !apiKey.isEmpty else {
+            throw KkhayError.invalidAPIKey
+        }
+
         guard let url = getURL(path: path) else {
             throw KkhayError.invalidURL
         }
@@ -39,18 +45,19 @@ public final class KkhayClient: Sendable {
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        req.setValue("kkhay-swift/1.0.0", forHTTPHeaderField: "User-Agent")
+        req.setValue("kkhay-swift/\(Self.version)", forHTTPHeaderField: "User-Agent")
 
         if let body = body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = body
         }
 
-        let (data, response): (Data, URLResponse)
+        let data: Data
+        let response: URLResponse
         do {
             (data, response) = try await session.data(for: req)
         } catch {
-            throw KkhayError.network(error)
+            throw KkhayError.network(error.localizedDescription)
         }
 
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -75,37 +82,65 @@ public final class KkhayClient: Sendable {
             let decoder = JSONDecoder()
             return try decoder.decode(T.self, from: data)
         } catch {
-            throw KkhayError.decodingError(error)
+            throw KkhayError.decodingError(error.localizedDescription)
         }
     }
 
-    /// Create a new crypto invoice.
+    /// Create a new sovereign crypto payment invoice.
     public func createInvoice(_ request: CreateInvoiceRequest) async throws -> CreateInvoiceResponse {
+        guard request.amount > 0 else {
+            throw KkhayError.invalidInput("createInvoice: 'amount' (or 'priceAmount') must be a positive number.")
+        }
+        guard !request.payNetwork.isEmpty else {
+            throw KkhayError.invalidInput("createInvoice: 'payNetwork' is required (e.g. 'bsc', 'polygon', 'solana', 'bitcoin').")
+        }
+        guard !request.payToken.isEmpty else {
+            throw KkhayError.invalidInput("createInvoice: 'payToken' is required (e.g. 'USDT', 'USDC', 'BTC', 'ETH', 'SOL').")
+        }
+
         let encoder = JSONEncoder()
         let data = try encoder.encode(request)
-        return try await self.request(path: "/v1/merchant/invoices", method: "POST", body: data)
+        return try await self.request(path: "/v1/gateway/invoices", method: "POST", body: data)
     }
 
-    /// Retrieve an invoice and its blockchain payments by ID.
+    /// Retrieve an invoice and its blockchain confirmations by ID.
     public func getInvoice(id: String) async throws -> GetInvoiceResponse {
         let cleanId = id.trimmingCharacters(in: .whitespacesAndNewlines)
-        return try await self.request(path: "/v1/merchant/invoices/\(cleanId)", method: "GET")
+        guard !cleanId.isEmpty else {
+            throw KkhayError.invalidInput("getInvoice: 'id' is required.")
+        }
+        guard let encodedId = cleanId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+            throw KkhayError.invalidURL
+        }
+        return try await self.request(path: "/v1/gateway/invoices/\(encodedId)", method: "GET")
     }
 
-    /// List merchant invoices with optional pagination.
-    public func listInvoices(page: Int = 1, limit: Int = 20, status: String? = nil) async throws -> ListInvoicesResponse {
-        var components = URLComponents(string: "/v1/merchant/invoices")
+    /// List gateway invoices with optional filtering and pagination.
+    public func listInvoices(
+        page: Int = 1,
+        limit: Int = 20,
+        status: String? = nil,
+        search: String? = nil
+    ) async throws -> ListInvoicesResponse {
+        var components = URLComponents(string: "/v1/gateway/invoices")
         var queryItems = [
             URLQueryItem(name: "page", value: String(page)),
-            URLQueryItem(name: "limit", value: String(limit))
+            URLQueryItem(name: "limit", value: String(limit)),
         ]
-        if let status = status {
+        if let status = status, !status.isEmpty {
             queryItems.append(URLQueryItem(name: "status", value: status))
         }
+        if let search = search, !search.isEmpty {
+            queryItems.append(URLQueryItem(name: "search", value: search))
+        }
         components?.queryItems = queryItems
-        let path = components?.string ?? "/v1/merchant/invoices"
+        let path = components?.string ?? "/v1/gateway/invoices"
 
         return try await self.request(path: path, method: "GET")
     }
-}
 
+    /// Check connectivity and API health status.
+    public func checkHealth() async throws -> HealthResponse {
+        return try await self.request(path: "/health", method: "GET")
+    }
+}
