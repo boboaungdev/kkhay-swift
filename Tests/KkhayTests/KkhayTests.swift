@@ -177,6 +177,61 @@ final class KkhayTests: XCTestCase {
         XCTAssertThrowsError(try KkhayWebhook.parseEvent(rawBody: payload, signature: "invalid_sig", ipnSecret: secret))
     }
 
+    func testPaymentRecordCodable() throws {
+        let jsonString = """
+        {
+            "id": "pay_1",
+            "tx_hash": "0x123",
+            "amount_received": "50.00",
+            "confirmations": 10,
+            "status": "SETTLED",
+            "created_at": "2026-10-25T18:00:00Z"
+        }
+        """
+        let data = Data(jsonString.utf8)
+        let decoder = JSONDecoder()
+        let payment = try decoder.decode(PaymentRecord.self, from: data)
+        XCTAssertEqual(payment.id, "pay_1")
+        XCTAssertEqual(payment.txHash, "0x123")
+        XCTAssertEqual(payment.amountReceived, "50.00")
+        XCTAssertEqual(payment.confirmations, 10)
+
+        let encoder = JSONEncoder()
+        let encodedData = try encoder.encode(payment)
+        let redecoded = try decoder.decode(PaymentRecord.self, from: encodedData)
+        XCTAssertEqual(redecoded.id, "pay_1")
+        XCTAssertEqual(redecoded.txHash, "0x123")
+    }
+
+    func testWebhookEventCodable() throws {
+        let jsonString = """
+        {
+            "event": "payment.paid",
+            "invoice_id": "inv_123",
+            "gateway_id": "gw_123",
+            "amount": 25.0,
+            "currency": "USD",
+            "price_amount": 25.0,
+            "price_currency": "USD",
+            "pay_amount": "25.00",
+            "pay_token": "USDT",
+            "pay_network": "bsc",
+            "deposit_address": "0xabc",
+            "status": "PAID",
+            "timestamp": "2026-10-25T18:00:00Z"
+        }
+        """
+        let data = Data(jsonString.utf8)
+        let decoder = JSONDecoder()
+        let event = try decoder.decode(WebhookEvent.self, from: data)
+
+        let encoder = JSONEncoder()
+        let encoded = try encoder.encode(event)
+        let redecoded = try decoder.decode(WebhookEvent.self, from: encoded)
+        XCTAssertEqual(redecoded.invoiceId, "inv_123")
+        XCTAssertEqual(redecoded.gatewayId, "gw_123")
+    }
+
     func testErrorDescriptions() {
         XCTAssertEqual(KkhayError.invalidAPIKey.errorDescription, "KkhayError: A valid non-empty API key is required.")
         XCTAssertEqual(KkhayError.invalidSignature.errorDescription, "Invalid K Khay webhook signature: Request rejected")

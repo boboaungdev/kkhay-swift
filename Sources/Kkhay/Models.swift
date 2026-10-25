@@ -251,6 +251,17 @@ public struct PaymentRecord: Codable, Sendable {
             ?? container.decodeIfPresent(String.self, forKey: .created_at)
             ?? ""
     }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(txHash, forKey: .txHash)
+        try container.encode(amountReceived, forKey: .amountReceived)
+        try container.encode(confirmations, forKey: .confirmations)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(forwardedTxHash, forKey: .forwardedTxHash)
+        try container.encode(createdAt, forKey: .createdAt)
+    }
 }
 
 public struct CreateInvoiceResponse: Codable, Sendable {
@@ -340,5 +351,24 @@ public struct WebhookEvent: Codable, Sendable {
         txHash = try container.decodeIfPresent(String.self, forKey: .txHash)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? InvoiceStatus.waiting.rawValue
         timestamp = try container.decodeIfPresent(String.self, forKey: .timestamp) ?? ""
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(event, forKey: .event)
+        try container.encode(invoiceId, forKey: .invoiceId)
+        try container.encodeIfPresent(gatewayId, forKey: .gatewayId)
+        try container.encode(amount, forKey: .amount)
+        try container.encode(currency, forKey: .currency)
+        try container.encode(priceAmount, forKey: .priceAmount)
+        try container.encode(priceCurrency, forKey: .priceCurrency)
+        try container.encodeIfPresent(orderId, forKey: .orderId)
+        try container.encode(payAmount, forKey: .payAmount)
+        try container.encode(payToken, forKey: .payToken)
+        try container.encode(payNetwork, forKey: .payNetwork)
+        try container.encode(depositAddress, forKey: .depositAddress)
+        try container.encodeIfPresent(txHash, forKey: .txHash)
+        try container.encode(status, forKey: .status)
+        try container.encode(timestamp, forKey: .timestamp)
     }
 }
